@@ -1,5 +1,3 @@
-use std::borrow::Borrow;
-
 use failure::Error;
 use futures::prelude::{async_block, await, Future};
 use futures::stream::{futures_unordered, iter_ok};
@@ -27,7 +25,7 @@ fn download_vidx<'a, C: Connect, I: Into<String>>(
                 .map(Response::body)
                 .flatten_stream()
                 .concat2())?;
-        Ok(parse_vidx(body, logger))
+        Ok(parse_vidx(&body, logger))
     }
 }
 
@@ -47,9 +45,9 @@ where
     )
 }
 
-fn parse_vidx(body: Chunk, logger: &Logger) -> Result<Vidx, minidom::Error> {
-    let string = String::from_utf8_lossy(body.as_ref());
-    Vidx::from_string(string.borrow(), logger)
+fn parse_vidx(body: &Chunk, logger: &Logger) -> Result<Vidx, minidom::Error> {
+    let string = String::from_utf8_lossy(body);
+    Vidx::from_string(&string, logger)
 }
 
 fn into_uri(Pidx { url, vendor, .. }: Pidx) -> String {

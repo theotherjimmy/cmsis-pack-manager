@@ -63,7 +63,7 @@ impl FromElem for Releases {
             .children()
             .flat_map(|c| Release::from_elem(c, l).ok_warn(l))
             .collect();
-        if to_ret.len() == 0usize {
+        if to_ret.is_empty() {
             Err(err_msg!("There must be at least one release!"))
         } else {
             Ok(Releases(to_ret))
@@ -106,7 +106,7 @@ impl<'a> DumpDevice<'a> {
             memories: Cow::Borrowed(&dev.memories),
             algorithms: Cow::Borrowed(&dev.algorithms),
             processor: Cow::Borrowed(&dev.processor),
-            from_pack: from_pack,
+            from_pack,
         }
     }
 }
@@ -232,7 +232,7 @@ impl Package {
 
     fn make_condition_lookup<'a>(&'a self, l: &Logger) -> HashMap<&'a str, &'a Condition> {
         let mut map = HashMap::with_capacity(self.conditions.0.iter().count());
-        for cond in self.conditions.0.iter() {
+        for cond in &self.conditions.0 {
             if let Some(dup) = map.insert(cond.id.as_str(), cond) {
                 warn!(l, "Duplicate Condition found {}", dup.id);
             }
@@ -269,7 +269,7 @@ pub fn check_args<'a, 'b>() -> App<'a, 'b> {
 
 pub fn check_command<'a>(_: &Config, args: &ArgMatches<'a>, l: &Logger) -> Result<(), FailError> {
     let filename = args.value_of("INPUT").unwrap();
-    match Package::from_path(Path::new(filename.clone()), &l) {
+    match Package::from_path(Path::new(filename), &l) {
         Ok(c) => {
             info!(l, "Parsing succedded");
             info!(l, "{} Valid Conditions", c.conditions.0.iter().count());
@@ -282,11 +282,11 @@ pub fn check_command<'a>(_: &Config, args: &ArgMatches<'a>, l: &Logger) -> Resul
                 ref condition,
                 ref files,
                 ..
-            } in c.make_components().iter()
+            } in &c.make_components()
             {
                 num_components += 1;
                 num_files += files.iter().count();
-                if let &Some(ref cond_name) = condition {
+                if let Some(ref cond_name) = *condition {
                     if cond_lookup.get(cond_name.as_str()).is_none() {
                         warn!(
                             l,
@@ -303,7 +303,7 @@ pub fn check_command<'a>(_: &Config, args: &ArgMatches<'a>, l: &Logger) -> Resul
                     ..
                 } in files.iter()
                 {
-                    if let &Some(ref cond_name) = condition {
+                    if let Some(ref cond_name) = *condition {
                         if cond_lookup.get(cond_name.as_str()).is_none() {
                             warn!(
                                 l,

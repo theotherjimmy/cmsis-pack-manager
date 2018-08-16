@@ -62,7 +62,7 @@ impl<'a, W: Write + Send + 'a> DownloadProgress for &'a Mutex<ProgressBar<W>> {
         }
     }
     fn for_file(&self, _: &str) -> Self {
-        self.clone()
+        self
     }
 }
 

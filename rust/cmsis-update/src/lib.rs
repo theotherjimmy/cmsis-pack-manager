@@ -90,7 +90,7 @@ pub fn update_args<'a, 'b>() -> App<'a, 'b> {
 
 pub fn update_command<'a>(conf: &Config, _: &ArgMatches<'a>, logger: &Logger) -> Result<(), Error> {
     let vidx_list = conf.read_vidx_list(&logger);
-    for url in vidx_list.iter() {
+    for url in &vidx_list {
         info!(logger, "Updating registry from `{}`", url);
     }
     let updated = update(conf, vidx_list, logger)?;

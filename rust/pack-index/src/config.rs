@@ -6,11 +6,13 @@ use app_dirs::{app_root, AppDataType, AppInfo};
 use failure::Error;
 use slog::Logger;
 
+#[derive(Default)]
 pub struct Config {
     pub pack_store: PathBuf,
     pub vidx_list: PathBuf,
 }
 
+#[derive(Default)]
 pub struct ConfigBuilder {
     pack_store: Option<PathBuf>,
     vidx_list: Option<PathBuf>,
