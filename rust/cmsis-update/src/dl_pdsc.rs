@@ -2,19 +2,24 @@ use std::path::PathBuf;
 
 use failure::Error;
 use futures::prelude::*;
-use hyper::{Body, Client, Uri};
 use hyper::client::Connect;
+use hyper::{Body, Client, Uri};
 use slog::Logger;
 
-use pack_index::{PdscRef};
 use pack_index::config::Config;
+use pack_index::PdscRef;
 
-use download::{IntoDownload, DownloadProgress, download_stream};
+use download::{download_stream, DownloadProgress, IntoDownload};
 use vidx::{download_vidx_list, flatmap_pdscs};
 
 impl IntoDownload for PdscRef {
     fn into_uri(&self, _: &Config) -> Result<Uri, Error> {
-        let &PdscRef {ref url, ref vendor, ref name, ..} = self;
+        let &PdscRef {
+            ref url,
+            ref vendor,
+            ref name,
+            ..
+        } = self;
         let uri = if url.ends_with('/') {
             format!("{}{}.{}.pdsc", url, vendor, name)
         } else {
@@ -24,7 +29,12 @@ impl IntoDownload for PdscRef {
     }
 
     fn into_fd(&self, config: &Config) -> PathBuf {
-        let &PdscRef {ref vendor, ref name, ref version, ..} = self;
+        let &PdscRef {
+            ref vendor,
+            ref name,
+            ref version,
+            ..
+        } = self;
         let mut filename = config.pack_store.clone();
         let pdscname = format!("{}.{}.{}.pdsc", vendor, name, version);
         filename.push(pdscname);
@@ -38,18 +48,18 @@ pub fn update_future<'a, C, I, P>(
     vidx_list: I,
     client: &'a Client<C, Body>,
     logger: &'a Logger,
-    progress: P
+    progress: P,
 ) -> impl Future<Item = Vec<PathBuf>, Error = Error> + 'a
-    where C: Connect,
-          I: IntoIterator<Item = String> + 'a,
-          P: DownloadProgress + 'a,
+where
+    C: Connect,
+    I: IntoIterator<Item = String> + 'a,
+    P: DownloadProgress + 'a,
 {
     let parsed_vidx = download_vidx_list(vidx_list, client, logger);
     let pdsc_list = parsed_vidx
         .filter_map(move |vidx| match vidx {
             Ok(v) => Some(flatmap_pdscs(v, client, logger)),
             Err(_) => None,
-        })
-        .flatten();
+        }).flatten();
     download_stream(config, pdsc_list, client, logger, progress).collect()
 }

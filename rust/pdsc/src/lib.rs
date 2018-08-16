@@ -4,33 +4,33 @@ extern crate utils;
 extern crate slog;
 #[macro_use]
 extern crate serde_derive;
-extern crate serde_json;
 extern crate failure;
+extern crate serde_json;
 
-extern crate pack_index;
 extern crate clap;
 extern crate minidom;
+extern crate pack_index;
 
+use clap::{App, Arg, ArgMatches, SubCommand};
+use minidom::{Element, Error, ErrorKind};
+use slog::Logger;
 use std::borrow::Cow;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::OpenOptions;
 use std::io::Read;
 use std::path::Path;
-use std::collections::{HashMap, BTreeMap};
-use minidom::{Element, Error, ErrorKind};
-use clap::{App, Arg, ArgMatches, SubCommand};
-use slog::Logger;
 
+use failure::Error as FailError;
+use pack_index::config::Config;
 use utils::parse::{assert_root_name, attr_map, child_text, get_child_no_ns, FromElem};
 use utils::ResultLogExt;
-use pack_index::config::Config;
-use failure::Error as FailError;
 
 mod component;
 mod condition;
 mod device;
 pub use component::{ComponentBuilders, FileRef};
 pub use condition::{Condition, Conditions};
-pub use device::{Device, Devices, Memories, Algorithm, Processors};
+pub use device::{Algorithm, Device, Devices, Memories, Processors};
 
 pub struct Release {
     pub version: String,
@@ -59,7 +59,8 @@ impl Releases {
 impl FromElem for Releases {
     fn from_elem(e: &Element, l: &Logger) -> Result<Self, Error> {
         assert_root_name(e, "releases")?;
-        let to_ret: Vec<_> = e.children()
+        let to_ret: Vec<_> = e
+            .children()
             .flat_map(|c| Release::from_elem(c, l).ok_warn(l))
             .collect();
         if to_ret.len() == 0usize {
@@ -69,7 +70,6 @@ impl FromElem for Releases {
         }
     }
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 struct DumpDevice<'a> {
@@ -174,12 +174,12 @@ impl FromElem for Board {
     fn from_elem(e: &Element, _: &Logger) -> Result<Self, Error> {
         Ok(Self {
             name: attr_map(e, "name", "board")?,
-            mounted_devices: e.children()
+            mounted_devices: e
+                .children()
                 .flat_map(|c| match c.name() {
                     "mountedDevice" => attr_map(c, "Dname", "mountedDevice").ok(),
                     _ => None,
-                })
-                .collect(),
+                }).collect(),
         })
     }
 }
@@ -210,27 +210,24 @@ impl Package {
             .0
             .clone()
             .into_iter()
-            .map(|comp| {
-                Component {
-                    vendor: comp.vendor.unwrap_or_else(|| self.vendor.clone()),
-                    class: comp.class.unwrap(),
-                    group: comp.group.unwrap(),
-                    sub_group: comp.sub_group,
-                    variant: comp.variant,
-                    version: comp.version.unwrap_or_else(|| {
-                        self.releases.latest_release().version.clone()
-                    }),
-                    api_version: comp.api_version,
-                    condition: comp.condition,
-                    max_instances: comp.max_instances,
-                    is_default: comp.is_default,
-                    deprecated: comp.deprecated,
-                    description: comp.description,
-                    rte_addition: comp.rte_addition,
-                    files: comp.files,
-                }
-            })
-            .collect()
+            .map(|comp| Component {
+                vendor: comp.vendor.unwrap_or_else(|| self.vendor.clone()),
+                class: comp.class.unwrap(),
+                group: comp.group.unwrap(),
+                sub_group: comp.sub_group,
+                variant: comp.variant,
+                version: comp
+                    .version
+                    .unwrap_or_else(|| self.releases.latest_release().version.clone()),
+                api_version: comp.api_version,
+                condition: comp.condition,
+                max_instances: comp.max_instances,
+                is_default: comp.is_default,
+                deprecated: comp.deprecated,
+                description: comp.description,
+                rte_addition: comp.rte_addition,
+                files: comp.files,
+            }).collect()
     }
 
     fn make_condition_lookup<'a>(&'a self, l: &Logger) -> HashMap<&'a str, &'a Condition> {
@@ -253,19 +250,14 @@ impl Package {
         self.devices
             .0
             .iter()
-            .map(|(name, d)| {
-                (name.as_str(), DumpDevice::from_device(d, from_pack.clone()))
-            })
+            .map(|(name, d)| (name.as_str(), DumpDevice::from_device(d, from_pack.clone())))
             .collect()
-
     }
 }
 
 pub fn check_args<'a, 'b>() -> App<'a, 'b> {
     SubCommand::with_name("check")
-        .about(
-            "Check a project or pack for correct usage of the CMSIS standard",
-        )
+        .about("Check a project or pack for correct usage of the CMSIS standard")
         .version("0.1.0")
         .arg(
             Arg::with_name("INPUT")
@@ -346,16 +338,16 @@ pub fn dump_devices_args<'a, 'b>() -> App<'a, 'b> {
                 .short("d")
                 .takes_value(true)
                 .help("Dump JSON in the specified file"),
-        )
-        .arg(Arg::with_name("boards").short("b").takes_value(true).help(
-            "Dump JSON in the specified file",
-        ))
-        .arg(
+        ).arg(
+            Arg::with_name("boards")
+                .short("b")
+                .takes_value(true)
+                .help("Dump JSON in the specified file"),
+        ).arg(
             Arg::with_name("INPUT")
                 .help("Input file to dump devices from")
                 .index(1),
         )
-
 }
 
 pub fn dump_devices<'a, P: AsRef<Path>, I: IntoIterator<Item = &'a Package>>(
@@ -430,17 +422,16 @@ pub fn dump_devices_command<'a>(
     args: &ArgMatches<'a>,
     l: &Logger,
 ) -> Result<(), FailError> {
-    let files = args.value_of("INPUT").map(|input| {
-        vec![Box::new(Path::new(input)).to_path_buf()]
-    });
+    let files = args
+        .value_of("INPUT")
+        .map(|input| vec![Box::new(Path::new(input)).to_path_buf()]);
     let filenames = files
         .or_else(|| {
             c.pack_store.read_dir().ok().map(|rd| {
                 rd.flat_map(|dirent| dirent.into_iter().map(|p| p.path()))
                     .collect()
             })
-        })
-        .unwrap();
+        }).unwrap();
     let pdscs = filenames
         .into_iter()
         .flat_map(|filename| match Package::from_path(&filename, &l) {
@@ -449,15 +440,15 @@ pub fn dump_devices_command<'a>(
                 error!(l, "parsing {:?}: {}", filename, e);
                 None
             }
-        })
-        .collect::<Vec<Package>>();
+        }).collect::<Vec<Package>>();
     let to_ret = dump_devices(&pdscs, args.value_of("devices"), args.value_of("boards"), l);
     debug!(l, "exiting");
     to_ret
 }
 
 pub fn dumps_components<'a, I>(pdscs: I) -> Result<String, FailError>
-    where I: IntoIterator<Item = &'a Package>,
+where
+    I: IntoIterator<Item = &'a Package>,
 {
     let components = pdscs
         .into_iter()

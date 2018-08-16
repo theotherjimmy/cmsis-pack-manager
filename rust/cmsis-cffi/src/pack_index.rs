@@ -1,6 +1,6 @@
 use slog::Logger;
-use std::os::raw::c_char;
 use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
 use std::path::PathBuf;
 use std::ptr::null_mut;
 

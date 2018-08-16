@@ -1,10 +1,10 @@
-use std::path::PathBuf;
-use std::io::{BufRead, BufReader, Write};
 use std::fs::{create_dir_all, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
+use std::path::PathBuf;
 
 use app_dirs::{app_root, AppDataType, AppInfo};
-use slog::Logger;
 use failure::Error;
+use slog::Logger;
 
 pub struct Config {
     pub pack_store: PathBuf,
@@ -84,8 +84,7 @@ impl Config {
                 .flat_map(|(linenum, line)| {
                     line.map_err(|e| error!(l, "Could not parse line #{}: {}", linenum, e))
                         .into_iter()
-                })
-                .collect(),
+                }).collect(),
             Err(_) => {
                 warn!(l, "Failed to open vendor index list read only. Recreating.");
                 let new_content = vec![

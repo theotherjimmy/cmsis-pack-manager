@@ -1,47 +1,47 @@
 #![feature(generators, libc, proc_macro_non_items, use_extern_macros)]
 
+extern crate clap;
+extern crate failure;
 extern crate futures_await as futures;
-extern crate tokio_core;
 extern crate hyper;
 extern crate hyper_rustls;
 extern crate minidom;
-extern crate clap;
-extern crate failure;
+extern crate tokio_core;
 
 #[macro_use]
 extern crate slog;
 
-extern crate utils;
 extern crate pack_index;
-extern crate pdsc;
 extern crate pbr;
+extern crate pdsc;
+extern crate utils;
 
 use std::sync::Mutex;
 
-use hyper::{Body, Client};
+use clap::{App, Arg, ArgMatches, SubCommand};
+use failure::Error;
 use hyper::client::Connect;
+use hyper::{Body, Client};
 use hyper_rustls::HttpsConnector;
-use tokio_core::reactor::Core;
+use pbr::ProgressBar;
+use slog::Logger;
 use std::iter::Iterator;
 use std::path::{Path, PathBuf};
-use clap::{App, Arg, ArgMatches, SubCommand};
-use slog::Logger;
-use failure::Error;
-use pbr::ProgressBar;
+use tokio_core::reactor::Core;
 
 use pack_index::config::Config;
 use pdsc::Package;
 use utils::parse::FromElem;
 
-pub mod upgrade;
-mod redirect;
-mod vidx;
-mod download;
-mod dl_pdsc;
 mod dl_pack;
+mod dl_pdsc;
+mod download;
+mod redirect;
+pub mod upgrade;
+mod vidx;
 
-use dl_pdsc::{update_future};
-use dl_pack::{install_future};
+use dl_pack::install_future;
+use dl_pdsc::update_future;
 use download::DownloadProgress;
 
 // This will "trick" the borrow checker into thinking that the lifetimes for
@@ -117,12 +117,12 @@ fn install_inner<'client, 'a: 'client, C, I: 'a, P: 'client>(
     core: &mut Core,
     client: &'client Client<C, Body>,
     logger: &'a Logger,
-    progress: P
+    progress: P,
 ) -> Result<Vec<PathBuf>, Error>
-    where
+where
     C: Connect,
     I: IntoIterator<Item = &'a Package>,
-    P: DownloadProgress
+    P: DownloadProgress,
 {
     core.run(install_future(config, pdsc_list, client, logger, progress))
 }
@@ -131,9 +131,9 @@ fn install_inner<'client, 'a: 'client, C, I: 'a, P: 'client>(
 pub fn install<'a, I: 'a>(
     config: &'a Config,
     pdsc_list: I,
-    logger: &'a Logger
+    logger: &'a Logger,
 ) -> Result<Vec<PathBuf>, Error>
-    where
+where
     I: IntoIterator<Item = &'a Package>,
 {
     let mut core = Core::new().unwrap();
@@ -160,16 +160,17 @@ pub fn install_args() -> App<'static, 'static> {
                 .required(true)
                 .takes_value(true)
                 .index(1)
-                .multiple(true)
+                .multiple(true),
         )
 }
 
 pub fn install_command<'a>(
     conf: &Config,
     args: &ArgMatches<'a>,
-    logger: &Logger
+    logger: &Logger,
 ) -> Result<(), Error> {
-    let pdsc_list: Vec<_> = args.values_of("PDSC")
+    let pdsc_list: Vec<_> = args
+        .values_of("PDSC")
         .unwrap()
         .filter_map(|input| Package::from_path(Path::new(input), logger).ok())
         .collect();

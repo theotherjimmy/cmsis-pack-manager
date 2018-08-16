@@ -1,29 +1,30 @@
 #[macro_use]
 extern crate slog;
-extern crate slog_term;
-extern crate slog_async;
 extern crate clap;
 extern crate cmsis_update;
+extern crate failure;
 extern crate pack_index;
 extern crate pdsc;
-extern crate failure;
+extern crate slog_async;
+extern crate slog_term;
 
-use pack_index::config::Config;
-use cmsis_update::{update_args, update_command, install_args, install_command};
-use pdsc::{check_args, check_command, dump_devices_args, dump_devices_command};
-use clap::{Arg, App};
-use slog::Drain;
+use clap::{App, Arg};
+use cmsis_update::{install_args, install_command, update_args, update_command};
 use failure::Error;
+use pack_index::config::Config;
+use pdsc::{check_args, check_command, dump_devices_args, dump_devices_command};
+use slog::Drain;
 
 fn main() {
     // Note: This argument parser should do nothing more than handle
     let matches = App::new("CMSIS Pack manager and builder")
         .version("0.1.0")
         .author("Jimmy Brisson")
-        .arg(Arg::with_name("verbose").short("v").help(
-            "Sets the level of verbosity",
-        ))
-        .subcommand(update_args())
+        .arg(
+            Arg::with_name("verbose")
+                .short("v")
+                .help("Sets the level of verbosity"),
+        ).subcommand(update_args())
         .subcommand(check_args())
         .subcommand(dump_devices_args())
         .subcommand(install_args())

@@ -1,15 +1,15 @@
-use slog::{Logger, Drain};
-use slog_term::{TermDecorator, FullFormat};
+use slog::{Drain, Logger};
 use slog_async::Async;
+use slog_term::{FullFormat, TermDecorator};
 use std::borrow::Cow;
-use std::os::raw::c_char;
 use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
 use std::path::{Path, PathBuf};
 
 use failure::err_msg;
 
-use cmsis_utils::ResultLogExt;
 use cmsis_utils::parse::FromElem;
+use cmsis_utils::ResultLogExt;
 use pack_desc::{self, dump_devices, Package};
 
 use pack_index::UpdateReturn;

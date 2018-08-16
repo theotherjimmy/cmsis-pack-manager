@@ -1,9 +1,9 @@
-use std::str::FromStr;
 use std::fmt::Display;
-use std::path::Path;
 use std::io::BufRead;
+use std::path::Path;
+use std::str::FromStr;
 
-use minidom::{Element, Children, Error, ErrorKind};
+use minidom::{Children, Element, Error, ErrorKind};
 use quick_xml::reader::Reader;
 use slog::Logger;
 
@@ -20,16 +20,16 @@ pub fn attr_map<'a, T>(from: &'a Element, name: &str, elemname: &'static str) ->
 where
     T: From<&'a str>,
 {
-    from.attr(name).map(T::from).ok_or_else(||
-        err_msg!("{} not found in {} element", name, elemname))
+    from.attr(name)
+        .map(T::from)
+        .ok_or_else(|| err_msg!("{} not found in {} element", name, elemname))
 }
 
 pub fn attr_parse_hex<'a>(
     from: &'a Element,
     name: &str,
     elemname: &'static str,
-) -> Result<u64, Error>
-{
+) -> Result<u64, Error> {
     from.attr(name)
         .ok_or_else(|| err_msg!("{} not found in {} element", name, elemname))
         .and_then(|st| {
@@ -43,7 +43,6 @@ pub fn attr_parse_hex<'a>(
         })
 }
 
-
 pub fn attr_parse<'a, T, E>(
     from: &'a Element,
     name: &str,
@@ -55,9 +54,7 @@ where
 {
     from.attr(name)
         .ok_or_else(|| err_msg!("{} not found in {} element", name, elemname))
-        .and_then(|st| {
-            st.parse::<T>().map_err(|e| err_msg!("{}", e))
-        })
+        .and_then(|st| st.parse::<T>().map_err(|e| err_msg!("{}", e)))
 }
 
 pub fn child_text<'a>(
@@ -66,12 +63,12 @@ pub fn child_text<'a>(
     elemname: &'static str,
 ) -> Result<String, Error> {
     match get_child_no_ns(from, name) {
-        Some(child) => {Ok(child.text())}
-        None => {Err(err_msg!(
+        Some(child) => Ok(child.text()),
+        None => Err(err_msg!(
             "child element \"{}\" not found in \"{}\" element",
             name,
-            elemname))}
-
+            elemname
+        )),
     }
 }
 
@@ -96,7 +93,6 @@ pub fn assert_root_name(from: &Element, name: &str) -> Result<(), Error> {
     }
 }
 
-
 pub trait FromElem: Sized {
     fn from_elem(e: &Element, l: &Logger) -> Result<Self, Error>;
 
@@ -114,10 +110,7 @@ pub trait FromElem: Sized {
         Self::from_reader(&mut r, l)
     }
     fn vec_from_children(clds: Children, l: &Logger) -> Vec<Self> {
-        clds.flat_map(move |cld| {
-            Self::from_elem(cld, l)
-                .ok_warn(l)
-                .into_iter()
-        }).collect()
+        clds.flat_map(move |cld| Self::from_elem(cld, l).ok_warn(l).into_iter())
+            .collect()
     }
 }

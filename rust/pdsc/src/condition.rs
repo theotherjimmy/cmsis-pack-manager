@@ -1,7 +1,7 @@
 use minidom::{Element, Error};
 use slog::Logger;
 
-use utils::parse::{FromElem, assert_root_name, attr_map};
+use utils::parse::{assert_root_name, attr_map, FromElem};
 use utils::ResultLogExt;
 
 pub struct ConditionComponent {

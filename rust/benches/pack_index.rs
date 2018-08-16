@@ -4,7 +4,7 @@ extern crate minidom;
 extern crate quick_xml;
 extern crate test;
 
-use cmsis::pack_index::{Vidx, Pidx, PdscRef};
+use cmsis::pack_index::{PdscRef, Pidx, Vidx};
 use cmsis::parse::FromElem;
 use test::Bencher;
 

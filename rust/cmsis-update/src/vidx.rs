@@ -1,11 +1,11 @@
 use std::borrow::Borrow;
 
 use failure::Error;
-use futures::prelude::{await, async_block, Future};
-use futures::Stream;
+use futures::prelude::{async_block, await, Future};
 use futures::stream::{futures_unordered, iter_ok};
-use hyper::{self, Body, Chunk, Client, Response};
+use futures::Stream;
 use hyper::client::Connect;
+use hyper::{self, Body, Chunk, Client, Response};
 use minidom;
 use slog::Logger;
 
@@ -65,7 +65,7 @@ pub(crate) fn flatmap_pdscs<'a, C>(
     client: &'a Client<C, Body>,
     logger: &'a Logger,
 ) -> impl Stream<Item = PdscRef, Error = Error> + 'a
-    where
+where
     C: Connect,
 {
     let pidx_urls = vendor_index.into_iter().map(into_uri);
@@ -73,7 +73,6 @@ pub(crate) fn flatmap_pdscs<'a, C>(
         .filter_map(|vidx| match vidx {
             Ok(v) => Some(iter_ok(v.pdsc_index.into_iter())),
             Err(_) => None,
-        })
-        .flatten();
+        }).flatten();
     iter_ok(pdsc_index.into_iter()).chain(job)
 }

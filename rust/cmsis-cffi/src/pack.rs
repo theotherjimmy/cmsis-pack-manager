@@ -1,6 +1,6 @@
 use slog::Logger;
+use std::ffi::CStr;
 use std::os::raw::c_char;
-use std::ffi::{CStr};
 
 use failure::err_msg;
 

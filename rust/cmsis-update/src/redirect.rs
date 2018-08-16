@@ -1,7 +1,7 @@
-use futures::prelude::{await, async_block, Future};
-use hyper::{Error, Body, Client, Response, StatusCode, Uri};
+use futures::prelude::{async_block, await, Future};
 use hyper::client::Connect;
 use hyper::header::Location;
+use hyper::{Body, Client, Error, Response, StatusCode, Uri};
 use slog::Logger;
 
 pub(crate) trait ClientRedirExt<C>

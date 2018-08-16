@@ -8,10 +8,10 @@ pub trait ResultLogExt<T, E> {
     fn ok_error(self, log: &Logger) -> Option<T>;
 }
 
-use std::fmt::Display;
 use slog::Logger;
+use std::fmt::Display;
 impl<T, E> ResultLogExt<T, E> for Result<T, E>
-    where
+where
     E: Display,
 {
     fn ok_warn(self, log: &Logger) -> Option<T> {
