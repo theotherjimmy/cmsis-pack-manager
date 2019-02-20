@@ -1,5 +1,6 @@
 use std::borrow::Borrow;
 
+use diesel::sqlite::SqliteConnection;
 use failure::Error;
 use futures::prelude::{await, async_block, Future};
 use futures::Stream;
@@ -13,6 +14,7 @@ use pack_index::{PdscRef, Pidx, Vidx};
 use utils::parse::FromElem;
 
 use redirect::ClientRedirExt;
+use dstore::insert_pdscref;
 
 fn download_vidx<'a, C: Connect, I: Into<String>>(
     client: &'a Client<C, Body>,
@@ -64,6 +66,7 @@ pub(crate) fn flatmap_pdscs<'a, C>(
     }: Vidx,
     client: &'a Client<C, Body>,
     logger: &'a Logger,
+    dstore: &'a SqliteConnection,
 ) -> impl Stream<Item = PdscRef, Error = Error> + 'a
     where
     C: Connect,
@@ -71,9 +74,15 @@ pub(crate) fn flatmap_pdscs<'a, C>(
     let pidx_urls = vendor_index.into_iter().map(into_uri);
     let job = download_vidx_list(pidx_urls, client, logger)
         .filter_map(|vidx| match vidx {
-            Ok(v) => Some(iter_ok(v.pdsc_index.into_iter())),
+            Ok(v) => {
+	        Some(iter_ok(v.pdsc_index.into_iter()))
+	    },
             Err(_) => None,
         })
         .flatten();
-    iter_ok(pdsc_index.into_iter()).chain(job)
+    iter_ok(pdsc_index.into_iter()).chain(job).and_then(move |pdsc| {
+        /* TODO: use this uid */
+        let _uid = insert_pdscref(&pdsc, dstore)?;
+	Ok(pdsc)
+    })
 }

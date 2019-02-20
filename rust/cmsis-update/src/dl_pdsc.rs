@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use diesel::sqlite::SqliteConnection;
 use failure::Error;
 use futures::prelude::*;
 use hyper::{Body, Client, Uri};
@@ -38,7 +39,8 @@ pub fn update_future<'a, C, I, P>(
     vidx_list: I,
     client: &'a Client<C, Body>,
     logger: &'a Logger,
-    progress: P
+    progress: P,
+    dstore: &'a SqliteConnection,
 ) -> impl Future<Item = Vec<PathBuf>, Error = Error> + 'a
     where C: Connect,
           I: IntoIterator<Item = String> + 'a,
@@ -47,7 +49,7 @@ pub fn update_future<'a, C, I, P>(
     let parsed_vidx = download_vidx_list(vidx_list, client, logger);
     let pdsc_list = parsed_vidx
         .filter_map(move |vidx| match vidx {
-            Ok(v) => Some(flatmap_pdscs(v, client, logger)),
+            Ok(v) => Some(flatmap_pdscs(v, client, logger, dstore)),
             Err(_) => None,
         })
         .flatten();

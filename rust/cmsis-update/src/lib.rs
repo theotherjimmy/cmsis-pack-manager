@@ -1,4 +1,8 @@
 #![feature(generators, libc, proc_macro_hygiene)]
+/* TODO: Remove this allow and figure out why diesel's 
+ * table! macro does this. This currently affets the 
+ * dstore module*/
+#![allow(proc_macro_derive_resolution_fallback)]
 
 extern crate futures_await as futures;
 extern crate tokio_core;
@@ -6,6 +10,10 @@ extern crate hyper;
 extern crate hyper_rustls;
 extern crate minidom;
 extern crate failure;
+#[macro_use]
+extern crate diesel;
+#[macro_use]
+extern crate diesel_migrations;
 
 #[macro_use]
 extern crate slog;
@@ -14,6 +22,7 @@ extern crate utils;
 extern crate pack_index;
 extern crate pdsc;
 
+use diesel::sqlite::SqliteConnection;
 use hyper::{Body, Client};
 use hyper::client::Connect;
 use hyper_rustls::HttpsConnector;
@@ -31,7 +40,9 @@ mod vidx;
 mod download;
 mod dl_pdsc;
 mod dl_pack;
+mod dstore;
 
+use dstore::connect;
 use dl_pdsc::{update_future};
 use dl_pack::{install_future};
 pub use download::DownloadProgress;
@@ -45,13 +56,14 @@ fn update_inner<'a, C, I, P>(
     client: &'a Client<C, Body>,
     logger: &'a Logger,
     progress: P,
+    dstore: &SqliteConnection,
 ) -> Result<Vec<PathBuf>, Error>
 where
     C: Connect,
     I: IntoIterator<Item = String>,
     P: DownloadProgress + 'a,
 {
-    core.run(update_future(config, vidx_list, client, logger, progress))
+    core.run(update_future(config, vidx_list, client, logger, progress, dstore))
 }
 
 /// Flatten a list of Vidx Urls into a list of updated CMSIS packs
@@ -60,13 +72,14 @@ where
     I: IntoIterator<Item = String>,
     P: DownloadProgress,
 {
+    let dstore = connect()?;
     let mut core = Core::new().unwrap();
     let handle = core.handle();
     let client: Client<HttpsConnector, _> = Client::configure()
         .keep_alive(true)
         .connector(HttpsConnector::new(4, &handle))
         .build(&handle);
-    update_inner(config, vidx_list, &mut core, &client, logger, progress)
+    update_inner(config, vidx_list, &mut core, &client, logger, progress, &dstore)
 }
 
 // This will "trick" the borrow checker into thinking that the lifetimes for
