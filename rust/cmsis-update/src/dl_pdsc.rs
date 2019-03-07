@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use diesel::sqlite::SqliteConnection;
 use failure::Error;
 use futures::prelude::*;
@@ -7,15 +5,15 @@ use hyper::{Body, Client, Uri};
 use hyper::client::Connect;
 use slog::Logger;
 
-use pack_index::{PdscRef};
 use pack_index::config::Config;
 
-use download::{IntoDownload, DownloadProgress, download_stream};
+use dstore::InsertedPdsc;
+use download::{DownloadToDatabase, DownloadProgress, download_stream_to_db};
 use vidx::{download_vidx_list, flatmap_pdscs};
 
-impl IntoDownload for PdscRef {
+impl DownloadToDatabase for InsertedPdsc {
     fn into_uri(&self, _: &Config) -> Result<Uri, Error> {
-        let &PdscRef {ref url, ref vendor, ref name, ..} = self;
+        let &InsertedPdsc {ref url, ref vendor, ref name, ..} = self;
         let uri = if url.ends_with('/') {
             format!("{}{}.{}.pdsc", url, vendor, name)
         } else {
@@ -24,12 +22,12 @@ impl IntoDownload for PdscRef {
         Ok(uri)
     }
 
-    fn into_fd(&self, config: &Config) -> PathBuf {
-        let &PdscRef {ref vendor, ref name, ref version, ..} = self;
-        let mut filename = config.pack_store.clone();
-        let pdscname = format!("{}.{}.{}.pdsc", vendor, name, version);
-        filename.push(pdscname);
-        filename
+    fn in_database(&self, dstore: &SqliteConnection) -> bool {
+        false
+    }
+
+    fn insert_text(&mut self, text: String, dstore: &SqliteConnection) -> Result<(), Error> {
+        Ok(())
     }
 }
 
@@ -41,7 +39,7 @@ pub fn update_future<'a, C, I, P>(
     logger: &'a Logger,
     progress: P,
     dstore: &'a SqliteConnection,
-) -> impl Future<Item = Vec<PathBuf>, Error = Error> + 'a
+) -> impl Future<Item = Vec<()>, Error = Error> + 'a
     where C: Connect,
           I: IntoIterator<Item = String> + 'a,
           P: DownloadProgress + 'a,
@@ -53,5 +51,5 @@ pub fn update_future<'a, C, I, P>(
             Err(_) => None,
         })
         .flatten();
-    download_stream(config, pdsc_list, client, logger, progress).collect()
+    download_stream_to_db(config, pdsc_list, client, logger, progress, dstore).collect()
 }

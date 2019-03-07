@@ -10,11 +10,11 @@ use hyper::client::Connect;
 use minidom;
 use slog::Logger;
 
-use pack_index::{PdscRef, Pidx, Vidx};
+use pack_index::{Pidx, Vidx};
 use utils::parse::FromElem;
 
 use redirect::ClientRedirExt;
-use dstore::insert_pdscref;
+use dstore::InsertedPdsc;
 
 fn download_vidx<'a, C: Connect, I: Into<String>>(
     client: &'a Client<C, Body>,
@@ -67,7 +67,7 @@ pub(crate) fn flatmap_pdscs<'a, C>(
     client: &'a Client<C, Body>,
     logger: &'a Logger,
     dstore: &'a SqliteConnection,
-) -> impl Stream<Item = PdscRef, Error = Error> + 'a
+) -> impl Stream<Item = InsertedPdsc, Error = Error> + 'a
     where
     C: Connect,
 {
@@ -81,8 +81,6 @@ pub(crate) fn flatmap_pdscs<'a, C>(
         })
         .flatten();
     iter_ok(pdsc_index.into_iter()).chain(job).and_then(move |pdsc| {
-        /* TODO: use this uid */
-        let _uid = insert_pdscref(&pdsc, dstore)?;
-	Ok(pdsc)
+        Ok(InsertedPdsc::try_from_ref(pdsc, dstore)?)
     })
 }

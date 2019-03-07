@@ -1,4 +1,4 @@
-#![feature(generators, libc, proc_macro_hygiene)]
+#![feature(generators, libc, proc_macro_hygiene, custom_attribute)]
 /* TODO: Remove this allow and figure out why diesel's 
  * table! macro does this. This currently affets the 
  * dstore module*/
@@ -57,7 +57,7 @@ fn update_inner<'a, C, I, P>(
     logger: &'a Logger,
     progress: P,
     dstore: &SqliteConnection,
-) -> Result<Vec<PathBuf>, Error>
+) -> Result<Vec<()>, Error>
 where
     C: Connect,
     I: IntoIterator<Item = String>,
@@ -67,7 +67,7 @@ where
 }
 
 /// Flatten a list of Vidx Urls into a list of updated CMSIS packs
-pub fn update<I, P>(config: &Config, vidx_list: I, logger: &Logger, progress: P) -> Result<Vec<PathBuf>, Error>
+pub fn update<I, P>(config: &Config, vidx_list: I, logger: &Logger, progress: P) -> Result<Vec<()>, Error>
 where
     I: IntoIterator<Item = String>,
     P: DownloadProgress,
