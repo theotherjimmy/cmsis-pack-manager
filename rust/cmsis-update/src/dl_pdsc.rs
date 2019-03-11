@@ -23,7 +23,7 @@ impl DownloadToDatabase for InsertedPdsc {
     }
 
     fn in_database(&self, _dstore: &SqliteConnection) -> bool {
-        false
+        self.pdsc_text.is_some()
     }
 
     fn insert_text(self, text: String, dstore: &SqliteConnection) -> Result<Self, Error> {

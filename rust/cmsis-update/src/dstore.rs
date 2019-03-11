@@ -58,7 +58,7 @@ impl<'a> InsertablePdscRef<'a> {
 
 fn insert_pdscref(pdsc: &PdscRef, dstore: &SqliteConnection) -> QueryResult<usize> 
 {
-    diesel::insert_into(current_pdsc::table)
+    diesel::insert_or_ignore_into(current_pdsc::table)
         .values(InsertablePdscRef::from_pdscref(pdsc))
         .execute(dstore)
 }
@@ -77,7 +77,7 @@ pub struct InsertedPdsc {
     version_patch: i32,
     version_full: String,
     pub(crate) url: String,
-    pdsc_text: Option<String>,
+    pub(crate) pdsc_text: Option<String>,
     parsed: bool,
 }
 
