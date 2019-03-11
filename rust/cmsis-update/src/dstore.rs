@@ -8,14 +8,13 @@ embed_migrations!();
 
 table!{
     use diesel::sql_types::*;
-    current_pdsc {
-	id -> Integer,
+    current_pdsc (vendor, name, version_full) {
 	vendor -> VarChar,
 	name -> VarChar,
 	version_major -> Integer,
 	version_minor -> Integer,
 	version_patch -> Integer,
-	version_meta -> Nullable<VarChar>,
+	version_full -> VarChar,
 	url -> VarChar,
 	pdsc_text -> Nullable<VarChar>,
 	parsed -> Bool,
@@ -38,7 +37,7 @@ struct InsertablePdscRef<'a> {
     version_major: i32,
     version_minor: i32,
     version_patch: i32,
-    version_meta: &'a str,
+    version_full: &'a str,
     parsed: bool,
 }
 
@@ -52,7 +51,7 @@ impl<'a> InsertablePdscRef<'a> {
 	    version_major: 0,
 	    version_minor: 0,
 	    version_patch: 0,
-	    version_meta: &pdsc.version,
+	    version_full: &pdsc.version,
 	}
     }
 }
@@ -69,40 +68,29 @@ fn insert_pdscref(pdsc: &PdscRef, dstore: &SqliteConnection) -> QueryResult<usiz
 #[derive(Identifiable)]
 #[derive(AsChangeset)]
 #[table_name="current_pdsc"]
+#[primary_key(vendor, name, version_full)]
 pub struct InsertedPdsc {
-    id: usize,
-    pub(crate) url: String,
     pub(crate) vendor: String,
     pub(crate) name: String,
     version_major: i32,
     version_minor: i32,
     version_patch: i32,
-    version_meta: String,
-    parsed: bool,
+    version_full: String,
+    pub(crate) url: String,
     pdsc_text: Option<String>,
+    parsed: bool,
 }
 
 impl InsertedPdsc {
     pub fn try_from_ref(pdsc: PdscRef, dstore: &SqliteConnection) -> QueryResult<Self> {
-        let id = insert_pdscref(&pdsc, dstore)?;
-	Ok(Self {
-	    id,
-	    url: pdsc.url,
-	    vendor: pdsc.vendor,
-	    name: pdsc.name,
-	    version_major: 0,
-	    version_minor: 0,
-	    version_patch: 0,
-	    version_meta: pdsc.version,
-	    parsed: false,
-	    pdsc_text: None,
-	})
+        insert_pdscref(&pdsc, dstore)?;
+	current_pdsc::table.find((pdsc.vendor, pdsc.name, pdsc.version))
+	    .get_result(dstore)
     }
 
     pub fn insert_text(mut self, new_text: String, dstore: &SqliteConnection) -> QueryResult<Self> {
-        use dstore::current_pdsc::dsl::*;
         self.pdsc_text.replace(new_text);
-	diesel::update(current_pdsc).set(&self).execute(dstore)?;
+	diesel::update(&self).set(&self).execute(dstore)?;
 	Ok(self)
     }
 }

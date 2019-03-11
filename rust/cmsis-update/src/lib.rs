@@ -42,7 +42,7 @@ mod dl_pdsc;
 mod dl_pack;
 mod dstore;
 
-use dstore::connect;
+use dstore::{connect, InsertedPdsc};
 use dl_pdsc::{update_future};
 use dl_pack::{install_future};
 pub use download::DownloadProgress;
@@ -57,17 +57,19 @@ fn update_inner<'a, C, I, P>(
     logger: &'a Logger,
     progress: P,
     dstore: &SqliteConnection,
-) -> Result<Vec<()>, Error>
+) -> Result<Vec<InsertedPdsc>, Error>
 where
     C: Connect,
     I: IntoIterator<Item = String>,
     P: DownloadProgress + 'a,
 {
-    core.run(update_future(config, vidx_list, client, logger, progress, dstore))
+    core.run(update_future(config, vidx_list, client, logger, dstore))
 }
 
 /// Flatten a list of Vidx Urls into a list of updated CMSIS packs
-pub fn update<I, P>(config: &Config, vidx_list: I, logger: &Logger, progress: P) -> Result<Vec<()>, Error>
+pub fn update<I, P>(
+    config: &Config, vidx_list: I, logger: &Logger, progress: P
+) -> Result<Vec<InsertedPdsc>, Error>
 where
     I: IntoIterator<Item = String>,
     P: DownloadProgress,

@@ -22,27 +22,25 @@ impl DownloadToDatabase for InsertedPdsc {
         Ok(uri)
     }
 
-    fn in_database(&self, dstore: &SqliteConnection) -> bool {
+    fn in_database(&self, _dstore: &SqliteConnection) -> bool {
         false
     }
 
-    fn insert_text(&mut self, text: String, dstore: &SqliteConnection) -> Result<(), Error> {
-        Ok(())
+    fn insert_text(self, text: String, dstore: &SqliteConnection) -> Result<Self, Error> {
+        Ok(self.insert_text(text, dstore)?)
     }
 }
 
 /// Create a future of the update command.
-pub fn update_future<'a, C, I, P>(
+pub fn update_future<'a, C, I>(
     config: &'a Config,
     vidx_list: I,
     client: &'a Client<C, Body>,
     logger: &'a Logger,
-    progress: P,
     dstore: &'a SqliteConnection,
-) -> impl Future<Item = Vec<()>, Error = Error> + 'a
+) -> impl Future<Item = Vec<InsertedPdsc>, Error = Error> + 'a
     where C: Connect,
           I: IntoIterator<Item = String> + 'a,
-          P: DownloadProgress + 'a,
 {
     let parsed_vidx = download_vidx_list(vidx_list, client, logger);
     let pdsc_list = parsed_vidx
@@ -51,5 +49,5 @@ pub fn update_future<'a, C, I, P>(
             Err(_) => None,
         })
         .flatten();
-    download_stream_to_db(config, pdsc_list, client, logger, progress, dstore).collect()
+    download_stream_to_db(config, pdsc_list, client, logger, dstore).collect()
 }

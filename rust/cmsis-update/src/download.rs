@@ -99,66 +99,49 @@ pub(crate) fn download_stream<'b, 'a: 'b, F, C, P: 'b, DL: 'a>(
     )
 }
 
-pub(crate) trait DownloadToDatabase {
+pub(crate) trait DownloadToDatabase: Sized {
     fn into_uri(&self, &Config) -> Result<Uri, Error>;
     fn in_database(&self, &SqliteConnection) -> bool;
-    fn insert_text(&mut self, String, &SqliteConnection) -> Result<(), Error>;
+    fn insert_text(self, String, &SqliteConnection) -> Result<Self, Error>;
 }
 
-fn download_to_db<'a,  C: Connect, P: DownloadProgress + 'a, D: DownloadToDatabase + 'a>(
+fn download_to_db<'a,  C: Connect, D: DownloadToDatabase + 'a>(
     source: D,
     dstore: &'a SqliteConnection,
     client: &'a Client<C, Body>,
     logger: &'a Logger,
     config: &'a Config,
-) -> impl Future<Item = (), Error = Error> + 'a {
+) -> impl Future<Item = D, Error = Error> + 'a {
     async_block!{
-        if !source.in_database(dstore){
+        if !source.in_database(dstore) {
 	    let uri = source.into_uri(config)?;
             let response = await!(client.redirectable(uri, logger))?;
             let chunk = await!(response.body().concat2())?;
 	    let text = String::from_utf8(chunk.to_vec())?;
-            source.insert_text(text, dstore);
-        }
-        Ok(())
+            source.insert_text(text, dstore)
+        } else {
+	    Ok(source)
+	}
     }
 }
 
 
-pub(crate) fn download_stream_to_db<'b, 'a: 'b, F, C, P: 'b, DL: 'a>(
+pub(crate) fn download_stream_to_db<'a, F, C, DL>(
     config: &'a Config,
     stream: F,
-    client: &'b Client<C, Body>,
-    logger: &'b Logger,
-    progress: P,
-    dstore: &'b SqliteConnection,
-) -> Box<Stream<Item = (), Error = Error> + 'b>
-    where F: Stream<Item = DL, Error = Error> + 'b,
+    client: &'a Client<C, Body>,
+    logger: &'a Logger,
+    dstore: &'a SqliteConnection,
+) -> Box<Stream<Item = DL, Error = Error> + 'a>
+    where F: Stream<Item = DL, Error = Error> + 'a,
           C: Connect,
-          DL: DownloadToDatabase,
-          P: DownloadProgress
+          DL: DownloadToDatabase + 'a,
 {
     Box::new(
-        async_stream_block!(
-            let to_dl = await!(stream.collect())?;
-            let len = to_dl.iter().count();
-            progress.size(len);
-            for from in to_dl {
-		// TODO: This is not a good replacement
-                let left = Arc::new(progress.for_file(""));
-		let right = left.clone();
-                stream_yield!(download_to_db(from, dstore, client, logger, config)
-                     .map(|x| {
-		         left.complete();
-		         Some(x)
-		     })
-                     .or_else( move |e| {
-                         slog_error!(logger, "download of ? failed: {}", e);
-                         right.complete();
-                         Ok(None)
-                     }));
-            }
-            Ok(())
-        ).buffer_unordered(32).filter_map(|x| x)
+        stream
+	    .map(move |from| {
+	        download_to_db(from, dstore, client, logger, config)
+	    })
+	    .buffer_unordered(32)
     )
 }
