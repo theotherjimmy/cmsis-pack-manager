@@ -63,7 +63,7 @@ where
     I: IntoIterator<Item = String>,
     P: DownloadProgress + 'a,
 {
-    core.run(update_future(config, vidx_list, client, logger, dstore))
+    core.run(update_future(config, vidx_list, client, logger, dstore, progress))
 }
 
 /// Flatten a list of Vidx Urls into a list of updated CMSIS packs

@@ -126,22 +126,35 @@ fn download_to_db<'a,  C: Connect, D: DownloadToDatabase + 'a>(
 }
 
 
-pub(crate) fn download_stream_to_db<'a, F, C, DL>(
+pub(crate) fn download_stream_to_db<'a, F, C, D, P>(
     config: &'a Config,
     stream: F,
     client: &'a Client<C, Body>,
     logger: &'a Logger,
     dstore: &'a SqliteConnection,
-) -> Box<Stream<Item = DL, Error = Error> + 'a>
-    where F: Stream<Item = DL, Error = Error> + 'a,
+    progress: P
+) -> Box<Stream<Item = D, Error = Error> + 'a>
+    where F: Stream<Item = D, Error = Error> + 'a,
           C: Connect,
-          DL: DownloadToDatabase + 'a,
+          D: DownloadToDatabase + 'a,
+	  P: DownloadProgress + 'a
 {
     Box::new(
-        stream
-	    .map(move |from| {
-	        download_to_db(from, dstore, client, logger, config)
-	    })
-	    .buffer_unordered(32)
+        async_stream_block!{
+            let to_dl = await!(stream.collect())?;
+            let len = to_dl.iter().count();
+            progress.size(len);
+	    for from in to_dl {
+		let for_file = progress.for_file("");
+		stream_yield!(download_to_db(from, dstore, client, logger, config)
+		    .then(move |res|{
+		        for_file.complete();
+			res
+			})
+
+		)
+	    }
+	    Ok(())
+	}.buffer_unordered(32)
     )
 }
