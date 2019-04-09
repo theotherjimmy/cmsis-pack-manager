@@ -27,7 +27,6 @@ use hyper::{Body, Client};
 use hyper::client::Connect;
 use hyper_rustls::HttpsConnector;
 use tokio_core::reactor::Core;
-use std::path::PathBuf;
 use slog::Logger;
 use failure::Error;
 
@@ -43,7 +42,7 @@ mod dl_pack;
 mod dstore;
 
 use dstore::connect;
-pub use dstore::InsertedPdsc;
+pub use dstore::{DownloadedPdsc, InstalledPack};
 use dl_pdsc::{update_future};
 use dl_pack::{install_future};
 pub use download::DownloadProgress;
@@ -57,8 +56,8 @@ fn update_inner<'a, C, I, P>(
     client: &'a Client<C, Body>,
     logger: &'a Logger,
     progress: P,
-    dstore: &SqliteConnection,
-) -> Result<Vec<InsertedPdsc>, Error>
+    dstore: &'a SqliteConnection,
+) -> Result<Vec<DownloadedPdsc>, Error>
 where
     C: Connect,
     I: IntoIterator<Item = String>,
@@ -70,7 +69,7 @@ where
 /// Flatten a list of Vidx Urls into a list of updated CMSIS packs
 pub fn update<I, P>(
     config: &Config, vidx_list: I, logger: &Logger, progress: P
-) -> Result<Vec<InsertedPdsc>, Error>
+) -> Result<Vec<DownloadedPdsc>, Error>
 where
     I: IntoIterator<Item = String>,
     P: DownloadProgress,
@@ -93,14 +92,15 @@ fn install_inner<'client, 'a: 'client, C, I: 'a, P: 'client>(
     core: &mut Core,
     client: &'client Client<C, Body>,
     logger: &'a Logger,
-    progress: P
-) -> Result<Vec<PathBuf>, Error>
+    progress: P,
+    dstore: &'client SqliteConnection,
+) -> Result<Vec<InstalledPack>, Error>
     where
     C: Connect,
     I: IntoIterator<Item = &'a Package>,
     P: DownloadProgress + 'a
 {
-    core.run(install_future(config, pdsc_list, client, logger, progress))
+    core.run(install_future(config, pdsc_list, client, logger, dstore, progress))
 }
 
 /// Flatten a list of Vidx Urls into a list of updated CMSIS packs
@@ -109,16 +109,17 @@ pub fn install<'a, I: 'a, P>(
     pdsc_list: I,
     logger: &'a Logger,
     progress: P
-) -> Result<Vec<PathBuf>, Error>
+) -> Result<Vec<InstalledPack>, Error>
     where
     I: IntoIterator<Item = &'a Package>,
     P: DownloadProgress + 'a,
 {
+    let dstore = connect()?;
     let mut core = Core::new().unwrap();
     let handle = core.handle();
     let client: Client<HttpsConnector, _> = Client::configure()
         .keep_alive(true)
         .connector(HttpsConnector::new(4, &handle))
         .build(&handle);
-    install_inner(config, pdsc_list, &mut core, &client, logger, progress)
+    install_inner(config, pdsc_list, &mut core, &client, logger, progress, &dstore)
 }

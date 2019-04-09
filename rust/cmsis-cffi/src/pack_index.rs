@@ -12,15 +12,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use failure::{err_msg, Error};
 
-use cmsis_update::{update, DownloadProgress, InsertedPdsc};
+use cmsis_update::{update, DownloadProgress, DownloadedPdsc};
 use pi::config::ConfigBuilder;
 use utils::set_last_error;
 
 pub struct UpdateReturn(Vec<PathBuf>);
 
 impl UpdateReturn {
-    pub(crate) fn from_inserted(frm: Vec<InsertedPdsc>) -> Self {
-        UpdateReturn(frm.into_iter().filter_map(InsertedPdsc::into_pathbuf).collect())
+    pub(crate) fn from_inserted(frm: Vec<DownloadedPdsc>) -> Self {
+        UpdateReturn(frm.into_iter().map(DownloadedPdsc::into_pathbuf).collect())
     }
 }
 

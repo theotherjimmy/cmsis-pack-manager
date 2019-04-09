@@ -1,6 +1,6 @@
 use std::fs::{create_dir_all, rename, OpenOptions};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use diesel::sqlite::SqliteConnection;
 use failure::Error;
@@ -9,15 +9,21 @@ use futures::prelude::{await, async_block, async_stream_block, stream_yield, Fut
 use hyper::{Body, Client, Uri};
 use hyper::client::Connect;
 use slog::Logger;
-use std::sync::Arc;
 
 use pack_index::config::Config;
 
 use redirect::ClientRedirExt;
 
+pub(crate) trait StartDownload {
+    type DL: IntoDownload;
+    fn start_download(self, &SqliteConnection) -> Result<Self::DL, Error>;
+}
+
 pub(crate) trait IntoDownload {
+    type Done;
     fn into_uri(&self, &Config) -> Result<Uri, Error>;
     fn into_fd(&self, &Config) -> PathBuf;
+    fn insert_downloaded(self, &Path, &SqliteConnection) -> Result<Self::Done, Error>;
 }
 
 pub trait DownloadProgress: Send {
@@ -36,17 +42,19 @@ impl DownloadProgress for () {
     }
 }
 
-fn download_file<'b,  C: Connect, P: DownloadProgress + 'b>(
-    source: Uri,
-    dest: PathBuf,
-    client: &'b Client<C, Body>,
-    logger: &'b Logger,
-    spinner: Arc<P>
-) -> impl Future<Item = PathBuf, Error = Error> + 'b {
+fn download_to_db<'a,  C: Connect, D: IntoDownload + 'a>(
+    source: D,
+    dstore: &'a SqliteConnection,
+    client: &'a Client<C, Body>,
+    logger: &'a Logger,
+    config: &'a Config,
+) -> impl Future<Item = D::Done, Error = Error> + 'a {
     async_block!{
+        let dest = source.into_fd(config);
         if !dest.exists(){
             dest.parent().map(create_dir_all);
-            let response = await!(client.redirectable(source, logger))?;
+            let url = source.into_uri(config)?;
+            let response = await!(client.redirectable(url, logger))?;
             let temp = dest.with_extension("part");
             let mut fd = OpenOptions::new()
                 .write(true)
@@ -55,106 +63,47 @@ fn download_file<'b,  C: Connect, P: DownloadProgress + 'b>(
             #[async]
             for bytes in response.body() {
                 fd.write_all(bytes.as_ref())?;
-                spinner.progress(bytes.len());
             }
             rename(&temp, &dest)?;
         }
-        spinner.complete();
-        Ok(dest)
-    }
-}
-
-pub(crate) fn download_stream<'b, 'a: 'b, F, C, P: 'b, DL: 'a>(
-    config: &'a Config,
-    stream: F,
-    client: &'b Client<C, Body>,
-    logger: &'b Logger,
-    progress: P
-) -> Box<Stream<Item = PathBuf, Error = Error> + 'b>
-    where F: Stream<Item = DL, Error = Error> + 'b,
-          C: Connect,
-          DL: IntoDownload,
-          P: DownloadProgress
-{
-    Box::new(
-        async_stream_block!(
-            let to_dl = await!(stream.collect())?;
-            let len = to_dl.iter().count();
-            progress.size(len);
-            for from in to_dl {
-                let dest = from.into_fd(config);
-                let source = from.into_uri(config)?;
-                let new_prog = Arc::new(progress.for_file(&dest.to_string_lossy()));
-                stream_yield!(download_file(source.clone(), dest, client, logger, new_prog.clone())
-                              .map(Some)
-                              .or_else(
-                                  move |e| {
-                                      slog_error!(logger, "download of {:?} failed: {}", source, e);
-                                      new_prog.complete();
-                                      Ok(None)
-                                  }))
-            }
-            Ok(())
-        ).buffer_unordered(32).filter_map(|x| x)
-    )
-}
-
-pub(crate) trait DownloadToDatabase: Sized {
-    fn into_uri(&self, &Config) -> Result<Uri, Error>;
-    fn in_database(&self, &SqliteConnection) -> bool;
-    fn insert_text(self, String, &SqliteConnection) -> Result<Self, Error>;
-}
-
-fn download_to_db<'a,  C: Connect, D: DownloadToDatabase + 'a>(
-    source: D,
-    dstore: &'a SqliteConnection,
-    client: &'a Client<C, Body>,
-    logger: &'a Logger,
-    config: &'a Config,
-) -> impl Future<Item = D, Error = Error> + 'a {
-    async_block!{
-        if !source.in_database(dstore) {
-	    let uri = source.into_uri(config)?;
-            let response = await!(client.redirectable(uri, logger))?;
-            let chunk = await!(response.body().concat2())?;
-	    let text = String::from_utf8(chunk.to_vec())?;
-            source.insert_text(text, dstore)
-        } else {
-	    Ok(source)
-	}
+        Ok(source.insert_downloaded(&dest, dstore)?)
     }
 }
 
 
-pub(crate) fn download_stream_to_db<'a, F, C, D, P>(
+pub(crate) fn download_stream_to_db<'a, F, C, P, S>(
     config: &'a Config,
     stream: F,
     client: &'a Client<C, Body>,
     logger: &'a Logger,
     dstore: &'a SqliteConnection,
     progress: P
-) -> Box<Stream<Item = D, Error = Error> + 'a>
-    where F: Stream<Item = D, Error = Error> + 'a,
+) -> Box<Stream<Item = <S::DL as IntoDownload>::Done, Error = Error> + 'a>
+    where F: Stream<Item = S, Error = Error> + 'a,
           C: Connect,
-          D: DownloadToDatabase + 'a,
-	  P: DownloadProgress + 'a
+          S: StartDownload + 'a,
+          P: DownloadProgress + 'a
 {
     Box::new(
         async_stream_block!{
             let to_dl = await!(stream.collect())?;
+            let to_dl: Vec<Result<S::DL, Error>> = to_dl.into_iter().map(|s| s.start_download(dstore)).collect();
             let len = to_dl.iter().count();
             progress.size(len);
-	    for from in to_dl {
-		let for_file = progress.for_file("");
-		stream_yield!(download_to_db(from, dstore, client, logger, config)
-		    .then(move |res|{
-		        for_file.complete();
-			res
-			})
-
-		)
-	    }
-	    Ok(())
-	}.buffer_unordered(32)
+            for from in to_dl {
+                let from = from?;
+                let for_file = progress.for_file(
+                    &from.into_fd(config).to_string_lossy()
+                );
+                stream_yield!(
+                    download_to_db(from, dstore, client, logger, config)
+                    .then(move |res|{
+                        for_file.complete();
+                        Ok(res.ok())
+                    })
+                )
+            }
+            Ok(())
+        }.buffer_unordered(32).filter_map(|x| x)
     )
 }

@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use diesel::sqlite::SqliteConnection;
 use failure::Error;
 use futures::prelude::*;
@@ -7,11 +9,19 @@ use slog::Logger;
 
 use pack_index::config::Config;
 
-use dstore::InsertedPdsc;
-use download::{DownloadToDatabase, DownloadProgress, download_stream_to_db};
+use dstore::{InsertedPdsc, DownloadedPdsc};
+use download::{StartDownload, IntoDownload, DownloadProgress, download_stream_to_db};
 use vidx::{download_vidx_list, flatmap_pdscs};
 
-impl DownloadToDatabase for InsertedPdsc {
+impl StartDownload for InsertedPdsc {
+    type DL = Self;
+    fn start_download(self, _: &SqliteConnection) -> Result<InsertedPdsc, Error> {
+        Ok(self)
+    }
+}
+
+impl IntoDownload for InsertedPdsc {
+    type Done = DownloadedPdsc;
     fn into_uri(&self, _: &Config) -> Result<Uri, Error> {
         let &InsertedPdsc {ref url, ref vendor, ref name, ..} = self;
         let uri = if url.ends_with('/') {
@@ -22,12 +32,17 @@ impl DownloadToDatabase for InsertedPdsc {
         Ok(uri)
     }
 
-    fn in_database(&self, _dstore: &SqliteConnection) -> bool {
-        self.pdsc_text.is_some()
+    fn into_fd(&self, config: &Config) -> PathBuf {
+        let &InsertedPdsc {ref version_full, ref vendor, ref name, ..} = self;
+        let mut filename = config.pack_store.clone();
+        let pdscname = format!("{}.{}.{}.pdsc", vendor, name, version_full);
+        filename.push(pdscname);
+        filename
     }
 
-    fn insert_text(self, text: String, dstore: &SqliteConnection) -> Result<Self, Error> {
-        Ok(self.insert_text(text, dstore)?)
+    fn insert_downloaded(self, path: &Path, dstore: &SqliteConnection) -> Result<DownloadedPdsc, Error> {
+        //TODO: maybe don't clone the path string here
+        Ok(self.insert_path(path.to_string_lossy().to_string(), dstore)?)
     }
 }
 
@@ -39,7 +54,7 @@ pub fn update_future<'a, C, I, P>(
     logger: &'a Logger,
     dstore: &'a SqliteConnection,
     progress: P,
-) -> impl Future<Item = Vec<InsertedPdsc>, Error = Error> + 'a
+) -> impl Future<Item = Vec<DownloadedPdsc>, Error = Error> + 'a
     where C: Connect,
           I: IntoIterator<Item = String> + 'a,
 	  P: DownloadProgress + 'a
