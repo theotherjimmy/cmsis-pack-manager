@@ -42,7 +42,8 @@ mod dl_pdsc;
 mod dl_pack;
 mod dstore;
 
-use dstore::{connect, InsertedPdsc};
+use dstore::connect;
+pub use dstore::InsertedPdsc;
 use dl_pdsc::{update_future};
 use dl_pack::{install_future};
 pub use download::DownloadProgress;

@@ -12,12 +12,17 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use failure::{err_msg, Error};
 
-use cmsis_update::update;
-use cmsis_update::DownloadProgress;
+use cmsis_update::{update, DownloadProgress, InsertedPdsc};
 use pi::config::ConfigBuilder;
 use utils::set_last_error;
 
 pub struct UpdateReturn(Vec<PathBuf>);
+
+impl UpdateReturn {
+    pub(crate) fn from_inserted(frm: Vec<InsertedPdsc>) -> Self {
+        UpdateReturn(frm.into_iter().filter_map(InsertedPdsc::into_pathbuf).collect())
+    }
+}
 
 pub struct RunningUpdateContext {
     pub(crate) thread_handle: thread::JoinHandle<Result<UpdateReturn, Error>>,
@@ -119,7 +124,7 @@ cffi!{
                     vidx_list, 
                     &log, 
                     DownloadSender::from_sender(send)
-                ).map(UpdateReturn);
+                ).map(UpdateReturn::from_inserted);
                 threads_done_flag.store(true, Ordering::Release);
                 res
             })?;

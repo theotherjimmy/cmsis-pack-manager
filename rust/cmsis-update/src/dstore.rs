@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use diesel::prelude::*;
 use diesel::sqlite::SqliteConnection;
 use failure::Error;
@@ -92,6 +94,10 @@ impl InsertedPdsc {
         self.pdsc_text.replace(new_text);
 	diesel::update(&self).set(&self).execute(dstore)?;
 	Ok(self)
+    }
+
+    pub fn into_pathbuf(self) -> Option<PathBuf> {
+        self.pdsc_text.map(PathBuf::from)
     }
 }
 
